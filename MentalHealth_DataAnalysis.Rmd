@@ -1,0 +1,1027 @@
+---
+title: "Music therapy for Mental Health"
+author: "Anastasia Di Carlo"
+date: "2024-02-07"
+output: 
+  ioslides_presentation:
+    css: style.css
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = TRUE, message = FALSE, warning = FALSE)
+
+#library(tidyverse)
+library(readr)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+
+```
+
+# Music therapy for mental health - How can music benefits your mental health
+
+## Introduzione
+
+<div style="text-align:center"><img width = "500" height = "333" src ="MTxMH1.png"/></div>
+
+
+La **musicoterapia**, o MT, è una pratica che fa uso della musica per migliorare lo stress, l'umore e la salute mentale complessiva di un individuo. La MT è anche riconosciuta come un approccio basato su prove, che utilizza la musica come **catalizzatore per ormoni "felici"** come l'ossitocina.
+
+Tuttavia, il mondo della musica offre una vasta gamma di generi musicali diversi.
+
+Il dataset preso in considerazione per questa analisi mira a identificare se vi siano correlazioni tra il gusto musicale di un individuo, con annesse le sue abitudini di ascolto, e la sua autodichiarata salute mentale.
+
+Idealmente, i risultati di questo studio potrebbero contribuire a un'**applicazione più informata della musicoterapia** o semplicemente fornire interessanti **prospettive sulla mente**.
+
+
+## Il dataset
+
+Come anticipato, il dataset è composto da tre blocchi principali:
+
+1. **Contesto**: domande generiche incentrate sullo sfondo musicale e le abitudini di ascolto degli intervistati
+2. **Generi musicali**: quanto spesso gli intervistati ascoltano i 16 generi musicali proposti, con possibilità di selezionare una tra le quattro opzioni - _Mai, Raramente, A volte,  Molto frequentemente_
+3. **Salute mentale**: informazioni circa lo stato di salute mentale di ogni intervistato, classificando in particolare _Ansia, Depressione, Insonnia_ e _OCD_ su una scala da 0 a 10, in base a quanto regolarmente, costantemente/o in modo estremo sperimentano queste condizioni psicologiche
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+form = read.csv("mxmh_survey_results.csv")
+
+
+#escludo colonne "Timestamp", "Streaming Service" e "Permission" non utili ai fini dell'analisi
+form <- form[, -c(1, 3, 33)]
+
+#rinomino le variabili
+nuove_variabili <- c(
+  "HoursPerDay", "WhileWorking", NA, NA, NA, "FavGenre", NA, "ForeignLanguages", 
+  "FrequencyClassical", "FrequencyCountry", "FrequencyEDM", "FrequencyFolk", "FrequencyGospel", 
+  "FrequencyHiphop", "FrequencyJazz", "FrequencyKpop", "FrequencyLatin", "FrequencyLofi", 
+  "FrequencyMetal", "FrequencyPop", "FrequencyRnB", "FrequencyRap", "FrequencyRock", 
+  "FrequencyVideogame", NA, NA, NA, NA, "MusicEffects"
+)
+
+# Rimuovere NA dal vettore
+nuove_variabili <- nuove_variabili[!is.na(nuove_variabili)]
+
+# Assegnare i nuovi nomi alle variabili
+colnames(form)[c(2, 3, 6, 8, 10:25, 30)] <- nuove_variabili
+
+#rimuovo entry falsate per non sfasare le indagini
+form <- form[form$Age != 89 | is.na(form$Age), ]
+form <- subset(form, !(Age == 21 & FavGenre == "K pop" & ForeignLanguages == ""))
+
+form$BPM[form$BPM > 500 | form$BPM < 30] <- NA
+
+#trasformo da decimali a interi i valori nella colonna Depression, perchè la parte decimale è sempre 0
+form$Depression <- trunc(form$Depression)
+
+#Sostituisco le stringhe vuote con dei valori neutri
+form$MusicEffects <- ifelse(form$MusicEffects == "", "No effect", form$MusicEffects)
+form$WhileWorking <- ifelse(form$WhileWorking == "", "No", form$WhileWorking)
+form$Instrumentalist <- ifelse(form$Instrumentalist == "", "No", form$Instrumentalist)
+form$ForeignLanguages <- ifelse(form$ForeignLanguages == "", "No", form$ForeignLanguages)
+
+#Rendo boolean le colonne che hanno True/False come valori
+form[c("WhileWorking", "Instrumentalist", "ForeignLanguages", "Composer", "Exploratory")] <- lapply(form[c("WhileWorking", "Instrumentalist", "ForeignLanguages", "Composer", "Exploratory")], function(x) x == "Yes")
+
+# trasformo la colonna MusicEffects da tipo character in tipo factor, dando l'ordine "Worsen", "No effect", "Improve"
+form$MusicEffects <- factor(form$MusicEffects, levels = c("Worsen", "No effect", "Improve"))
+
+#nuova tabella con Age non nulla e frequenze in valori numerici
+frequencyTable <- form[, c(1, 10:25)] %>%
+  na.omit(frequencyTable) %>%
+  mutate_at(vars(c(2:17)), ~ifelse(. %in% c("Never", "Rarely", "Sometimes", "Very frequently"), as.numeric(factor(., levels = c("Never", "Rarely", "Sometimes", "Very frequently"))) -1, .))
+
+# Frequenze da character a factor
+form <- form %>%
+  mutate_at(vars(c(10:25)), ~factor(., levels = c("Never", "Rarely", "Sometimes", "Very frequently")))
+
+form <- form %>%
+  mutate(FavGenre = case_when(FavGenre == "Hip hop" ~ "Hiphop", TRUE ~ FavGenre)) %>%
+  mutate(FavGenre = case_when(FavGenre == "Video game music" ~ "VideogameMusic", TRUE ~ FavGenre)) %>%
+  mutate(FavGenre = case_when(FavGenre == "K pop" ~ "Kpop", TRUE ~ FavGenre)) %>%
+  mutate(FavGenre = case_when(FavGenre == "R&B" ~ "RnB", TRUE ~ FavGenre))
+  
+
+# Aggiungo colonna AgeGroup con la suddivisione in fasce di età
+form <- form %>%
+  mutate(AgeGroup = cut(Age, breaks = c(10, 18, 25, 50, 80), labels = c("10-18", "19-25", "26-50", "51-80")))
+frequencyTable <- frequencyTable %>%
+  mutate(AgeGroup = cut(Age, breaks = c(10, 18, 25, 50, 80), labels = c("10-18", "19-25", "26-50", "51-80")))
+
+
+# head(form) #la tabella si presenterà così
+```
+
+# Primo blocco: Contesto
+
+## Esplorazione del background degli intervistati
+
+In questa prima parte di analisi si andranno a studiare gli intervistati e le loro abitudini in ambito musicale.
+
+In dettaglio verrà analizzata:
+
+- La **distribuzione dell'età** dei partecipanti
+- Le **ore che dedicano all'ascolto** di musica durante l'arco della giornata, specificando se questa viene ascoltata **anche come sottofondo** durante attività intellettuali come lo studio o il lavoro
+- L'attitudine degli intervistati ad uscire dalla propria _comfort zone_, studiando la loro **apertura a nuovi generi musicali** e all'ascolto di brani in una **lingua** in cui non sono fluenti.
+
+## Distribuzione dell'età
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#DISTRIBUZIONE DELL'ETA
+#utilizzo frequencyTable perchè privo di valori Age = NA
+
+# Calcolare la media e i quartili
+media <- mean(frequencyTable$Age)
+quartile1 <- quantile(frequencyTable$Age, 0.25)
+quartile3 <- quantile(frequencyTable$Age, 0.75)
+
+# Creare il grafico con mediana e quartili
+ggplot(frequencyTable, aes(x = Age)) +
+  geom_histogram(fill = viridis::viridis_pal()(20), color = "black", bins = 20) +
+  geom_vline(xintercept = media, color = "red", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = quartile1, color = "green", linetype = "dashed", size = 0.5) +
+  geom_vline(xintercept = quartile3, color = "green", linetype = "dashed", size = 0.5) +
+  labs(title = "Distribuzione dell'età", x = "Età", y = "Frequenza") +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size = 15, face = "bold"))
+
+# summary(frequencyTable$Age)
+```
+
+Dal grafico si può notare che la maggior parte delle persone intervistate hanno un'età compresa **tra i 18 e i 28 anni**.
+La media d'età è di 25 anni, con gli intervistati più giovani che hanno un'età pari a 10 e il più anziano che ha 80 anni.
+
+Durante il corso dell'indagine, si analizzeranno diversi aspetti categorizzando gli utenti in base alle seguenti fasce d'età:
+
+- La fascia **10-18** rappresenta i partecipanti che frequentano, per la maggior parte, la scuola dell'obbligo e che non hanno un lavoro.
+- La fascia **19-25** rappresenta coloro che hanno raggiunto la maggiore età e hanno conseguito almeno un titolo di studio.
+- La fascia **26-50** comprende gli adulti con un impiego stabile.
+- La fascia **50-80** che infine racchiude tutti coloro che hanno affrontato o stanno per affrontare un periodo di transizione dalla vita professionale a quella di pensionato.
+
+## Quante ore dedicate all'ascolto di musica passano le persone in base alla loro età
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#QUANTE ORE DI MUSICA AL GIORNO ASCOLTANO LE PERSONE IN BASE ALLA LORO ETA
+
+form %>%
+  filter(!is.na(AgeGroup)) %>% 
+  ggplot(mapping = aes(x = AgeGroup, y = HoursPerDay, fill = AgeGroup)) + 
+  geom_boxplot() +
+  labs(title = "Ore dedicate all'ascolto di musica in base all'età", x = "Fascia d'età", y = "Ore di ascolto al giorno") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), legend.title = element_blank()) +
+  scale_fill_manual(values = c("#006975", "#098b9a", "#7ac9d0", "#c8e8ea"))
+
+```
+
+La fascia d'età che ascolta più musica è quella compresa tra i 10 e i 18 anni, seguita dai giovani di età compresa tra i 19 e i 25 anni.
+
+Questo potrebbe essere attribuito al fatto che **i giovani** in queste fasce d'età, oltre ad essere in una fase della vita che gode di maggior **tempo libero** a disposizione, sono più propensi a utilizzare la **musica come mezzo** di espressione e connessione sociale.
+
+La riduzione di tempo dedicato all'ascolto di musica nelle **fasce di età avanzata** potrebbe essere attribuita a responsabilità crescenti legate alla carriera, alla famiglia o ad altri impegni, che potrebbero **limitare il tempo disponibile per attività "svago"** come l'ascolto di musica.
+
+## Quali generi musicali vengono prediletti?
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+form %>%
+  filter(!is.na(Age)) %>% 
+  ggplot(mapping = aes(x = Age, y = HoursPerDay, color = FavGenre)) + 
+  geom_point() +
+  scale_color_manual(
+    values = c(Classical = "#7173a5", Latin = "#b04b2a",
+               Country = "#303a80", Lofi = "#303a80",
+               EDM = "#7a4857", Metal = "#b04b2a",
+               Folk = "#7173a5", Pop = "#7a4857",
+               Gospel = "#7173a5", RnB = "#303a80",
+               Hiphop = "#7173a5", Rap = "#303a80",
+               Jazz = "#7a4857", Rock = "#303a80",
+               Kpop = "#b04b2a", VideogameMusic = "#7173a5"),
+    limits = c("Lofi", "Rock", "RnB", "Rap", "Country", "Hiphop", "Folk", "Gospel",
+               "Classical", "VideogameMusic", "Pop", "Jazz", "EDM", "Kpop", "Latin", "Metal")) + 
+  facet_wrap(~FavGenre) + 
+  labs(title = "Ore dedicate all'ascolto di musica in base all'età e al genere preferito", x = "Età", y = "Ore di ascolto al giorno") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), legend.position = "none")
+
+```
+
+Analizzando i grafici di dispersione sull'ascolto musicale, emergono interessanti tendenze nei generi preferiti tra le diverse fasce d'età. 
+
+Il **rock** si conferma come il **genere preferito** in generale, evidenziando una sua presenza costante tra le preferenze trasversali e, assieme all'**EDM**, rappresenta il genere che viene prediletto da chi ascolta musica per più di 15 ore al giorno.
+
+Le fasce d'età più **giovani** dimostrano un'apertura verso **generi più contemporanei** e dinamici come rap, latin, lofi, kpop ed EDM. 
+D'altra parte, **gli adulti** sopra i 50 anni mostrano un interesse particolare nel **gospel**, un genere noto per la sua profondità emotiva e la connessione spirituale.
+
+Il **colore** dei dati all'interno dei grafici rappresenta il **BPM medio** dello specifico genere. 
+Le tonalità più vicine al blu denotano un BPM minore, al contrario di quelle che virano verso il rosso, che rappresentano generi dal BPM più elevato.
+
+Il lofi, con un range di 60-90 BPM, e il metal, caratterizzato da 200-300 BPM, emergono come i generi musicali con il minimo e il massimo BPM, rispettivamente, tra tutti quelli analizzati.
+
+## La musica come sottofondo per lo svolgimento di attività intellettuali o manuali
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#QUANTE PERSONE ASCOLTANO LA MUSICA COME SOTTOFONDO MENTRE LAVORANO
+
+ggplot(form) + 
+  geom_histogram(aes(x = WhileWorking, fill = WhileWorking), stat = "count") +
+  labs(title = "Persone che ascoltano musica mentre studiano/lavorano", x = "Musica durante il lavoro", y = "") +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#f5910f", "#cbf50f"))
+
+
+```
+
+Il **77%** delle persone coinvolte preferisce ascoltare musica durante lo studio o il lavoro, mentre il restante **23%** delle persone opta per uno studio/lavoro senza musica.
+
+I dati quindi fanno emergere una chiara inclinazione da parte delle persone verso l'**integrazione della musica nelle attività quotidiane**.
+La musica, in molti casi, può agire come uno **stimolo positivo**, migliorando il morale, alleviando lo stress e contribuendo a un'esperienza più gradevole durante le attività.
+
+Alcune persone tuttavia potrebbero trovare difficile concentrarsi con la presenza di musica, preferendo un ambiente più silenzioso per massimizzare la produttività.
+
+_(Questo è un dato del quale tener conto per un eventuale uso della musicoterapia su determinati individui il cui lavoro occupa una porzione consistente della giornata)_
+
+## Ascolto di brani in una lingua straniera
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#QUANTE PERSONE ASCOLTANO MUSICA IN LINGUA STRANIERA
+
+ggplot(form) + 
+  geom_histogram(aes(x = ForeignLanguages, fill = ForeignLanguages), stat = "count") +
+  labs(title = "Persone che ascoltano regolarmente musica con testi \nin una lingua in cui non sono fluenti", 
+       x = "Lingua straniera", y = "") +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#f5910f", "#cbf50f"))
+
+
+```
+
+Il **55%** delle persone coinvolte ha scelto di ascoltare regolarmente musica con testi in una lingua in cui non sono fluenti.
+Questo potrebbe essere attribuito al desiderio di **esplorare** e familiarizzare con **nuove lingue** o potrebbe riflettere una **preferenza per la melodia** e l'atmosfera sonora rispetto alla comprensione letterale dei testi.
+
+Mentre il restante **45%** degli intervistati preferisce ascoltare musica con eventuali testi esclusivamente nella loro lingua madre.
+Questa scelta potrebbe derivare da una maggiore attenzione alla comprensione e all'apprezzamento del **significato delle parole**, cercando una connessione più personale con la musica.
+
+## Apertura a nuovi generi musicali
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#QUANTE PERSONE ESPLORANO NUOVI GENERI MUSICALI
+
+ggplot(form) + 
+  geom_histogram(aes(x = Exploratory, fill = Exploratory), stat = "count") +
+  labs(title = "Persone che esplorano attivamente nuovi artisti/generi musicali", 
+       x = "Apertura a nuovi generi musicali", y = "") +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#f5910f", "#cbf50f"))
+
+```
+Intorno al **70%** delle persone coinvolte dimostra un atteggiamento attivo nell'**esplorare** nuovi artisti e generi musicali.
+
+Al fine di ottenere conclusioni più accurate e dettagliate, è stata esaminata la percentuale di partecipazione al voto in ciascuna fascia d'età, analizzando quanti individui hanno scelto di esprimere il loro voto per una delle due classi.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#L'età è determinante nello scegliere di ascoltare anche nuovi generi?
+
+form %>%
+  filter(!is.na(AgeGroup)) %>% 
+  ggplot() + 
+  geom_bar(aes(x = Exploratory, fill = AgeGroup), position = "fill", stat = "count") +
+  scale_fill_manual(values = c("10-18" = "#fea837", "19-25" = "#b85b56", "26-50" = "#84495f", "51-80" = "#593e67")) +
+  coord_polar(theta = "y", direction = -1) +
+  labs(title = "Persone che esplorano nuovi generi musicali in base all'età", 
+       subtitle = "Cerchio piccolo = FALSE  -  Cerchio grande = TRUE") +
+  theme_void() +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size = 15, face = "bold")) 
+
+```
+
+Nel grafico si può notare che sia la fascia 19-25 che quella 26-50 sono presenti in ugual proporzione in entrambe le categorie.
+
+Si nota invece un **inversione di trend nelle fasce di età "limite"**, quindi negli adulti over 50, che tendono a preferire generi musicali a loro familiari, e nei giovani al di sotto dei 18 anni, che invece dimostrano di essere i più propensi all'esplorazione del "nuovo".
+
+L'atteggiamento differenziato tra giovani e anziani nell'esplorare attivamente nuovi artisti e generi musicali può essere influenzato da diversi fattori:
+
+- I giovani sono inclini alla ricerca costante di **nuove esperienze** e sono più soggetti all'**influenza sociale** (coetanei, social media, nuovi trend)
+- Durante la giovinezza, le persone sono spesso impegnate nel **definire una propria identità**. La musica può diventare un mezzo di espressione individuale e un modo per identificarsi in gruppi culturali specifici.
+- Gli anziani al contrario potrebbero preferire rimanere legati a generi musicali familiari perché la musica può rappresentare una fonte di **stabilità emotiva** e di **confort**, e potrebbe portare ad una connessione con ricordi e esperienze passate della loro vita.
+- Con l'invecchiare, le persone tendono a sviluppare **abitudini più solide** e più difficili da cambiare.
+
+## Prime considerazioni
+
+Questa prima analisi può fornire spunti interessanti per un utilizzo più informato e, quindi, più efficace della musicoterapia.
+Abbiamo visto che a fasce d'età diverse corrispondono abitudini in ambito musicale differenti.
+
+- **Adattamento alle preferenze generazionali**: 
+  - Per i giovani che tendono ad ascoltare più musica, la musicoterapia potrebbe incorporare una **vasta gamma di generi** e stili musicali più in linea con le loro preferenze, poichè sperimentazioni con nuovi generi possono essere parte integrante della terapia.
+  - Per gli adulti che ascoltano meno musica, l'approccio potrebbe mirare a concentrarsi su **generi più familiari** e riconoscibili, cercando di creare un legame emotivo attraverso la nostalgia o la connessione con la musica preferita del passato.
+
+- **Considerazione delle preferenze lavorative**:
+  - Per coloro che preferiscono ascoltare musica mentre lavorano, la musicoterapia potrebbe integrare playlist adatte all'ambiente lavorativo, contribuendo a migliorare la concentrazione e ridurre lo stress.
+  - Per coloro che preferiscono il silenzio, potrebbe essere utile incorporare sessioni di musicoterapia più tranquille o basate su **strumenti meno invasivi**.
+
+- **Approccio bilanciato alla lingua delle canzoni**:
+  - Per coloro che scelgono di ascoltare musica in lingue straniere, preferendo la melodia, la musicoterapia potrebbe enfatizzare l'**aspetto emotivo e sensoriale della musica**.
+  - Per coloro che danno più importanza al significato del testo, la musicoterapia potrebbe concentrarsi su **brani con testi significativi**, incoraggiando la riflessione e la condivisione di esperienze attraverso la musica.
+
+- **Rispetto per l'approccio abitudinario degli anziani**:
+  - Per gli anziani più restii ad ampliare il loro bagaglio musicale, l'approccio potrebbe enfatizzare la familiarità e la stabilità, focalizzandosi sulla riproduzione di **brani preferiti del passato** per evocare ricordi positivi e fornire comfort.
+
+
+# Secondo blocco: Generi musicali
+
+## Esplorazione dei generi musicali preferiti 
+
+In questa sezione si andranno ad analizzare i generi prefertiti e quelli più ascoltati dalle persone sulla base di alcune caratteristiche.
+
+Verrà studiato il genere musicale prediletto tra **coloro che praticano la musica** suonando uno strumento o componendo, con l'obiettivo di scrutare eventuali variazioni nelle preferenze rispetto a chi non si identifica in queste categorie.
+
+Saranno oggetto di indagine, infine, i **generi musicali più ascoltati**, delineati in base alle fasce d'età dei partecipanti.
+
+## Confronto delle preferenze musicali tra musicisti e non musicisti 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, out.width='49%'}
+#VARIAZIONI DEL GENERE PREFERITO SULLA BASE DELLA CAPACITA DI UNA PERSONA DI SUONARE UNO STRUMENTO
+
+desired_order <- c("Lofi", "Rock", "RnB", "Rap", "Country", "Hiphop", "Folk", "Gospel",
+                   "Classical", "VideogameMusic", "Pop", "Jazz", "EDM", "Kpop", "Latin", "Metal")
+
+form %>%
+  filter(Instrumentalist == TRUE) %>%
+  filter(FavGenre != "Latin") %>%
+  ggplot() + 
+  geom_histogram(aes(x = reorder(FavGenre, match(FavGenre, desired_order)), fill = FavGenre), stat = "count") +
+  labs(title = "Genere preferito di chi suona uno strumento musicale", 
+       x = "Favorite genre", y = "Instrumentalist") +
+  theme_void() +
+  theme(legend.title = element_blank(), legend.position = "none",
+        plot.title = element_text(size = 15, face = "bold"),
+        axis.text.x = element_text(angle = 0, hjust = 1)) +
+  coord_polar(theta = "x", direction = -1) +
+  scale_fill_manual(values = c(Classical = "#7173a5", Latin = "#b04b2a",
+                    Country = "#303a80", Lofi = "#303a80",
+                    EDM = "#7a4857", Metal = "#b04b2a",
+                    Folk = "#7173a5", Pop = "#7a4857",
+                    Gospel = "#7173a5", RnB = "#303a80",
+                    Hiphop = "#7173a5", Rap = "#303a80",
+                    Jazz = "#7a4857", Rock = "#303a80",
+                    Kpop = "#b04b2a", VideogameMusic = "#7173a5"))
+
+
+form %>%
+  filter(Instrumentalist == FALSE) %>%
+  ggplot() + 
+  geom_histogram(aes(x = reorder(FavGenre, match(FavGenre, desired_order)), fill = FavGenre), stat = "count") +
+  labs(title = "Genere preferito di chi non suona uno strumento", 
+       x = "Favorite genre", y = "Not an instrumentalist") +
+  theme_void() +
+  theme(legend.title = element_blank(), legend.position = "none",
+        plot.title = element_text(size = 15, face = "bold"),
+        axis.text.x = element_text(angle = 0, hjust = 1)) +
+  coord_polar(theta = "x", direction = -1) +
+  scale_fill_manual(values = c(Classical = "#7173a5", Latin = "#b04b2a",
+                    Country = "#303a80", Lofi = "#303a80",
+                    EDM = "#7a4857", Metal = "#b04b2a",
+                    Folk = "#7173a5", Pop = "#7a4857",
+                    Gospel = "#7173a5", RnB = "#303a80",
+                    Hiphop = "#7173a5", Rap = "#303a80",
+                    Jazz = "#7a4857", Rock = "#303a80",
+                    Kpop = "#b04b2a", VideogameMusic = "#7173a5"))
+
+```
+
+Dai due grafici si evince che il **Rock** è, ancora una volta, il genere preferito di entrambe le categorie.
+Viene quasi immediato notare che i musicisti prediligano generi come il Metal e la Classica, mentre i non musicisti siano attratti maggiormente dal Pop.
+
+La proporzione maggiore di **preferenza dei musicisti verso generi come il Metal, la musica classica e il jazz**, potrebbe essere motivata dalla complessità e dalla ricchezza artistica di questi stili musicali.
+
+L'**orientamento dei non musicisti verso generi più accessibili e popolari, come il Pop, l'Hip Hop, l'R&B e l'EDM** potrebbe riflettere la ricerca di un'esperienza musicale più leggera, influenzata dalla presenza predominante di questi stili nei media di massa e nelle piattaforme di streaming, rendendoli facilmente accessibili e diffusi nella cultura popolare.
+
+Anche in questo caso il colore di ogni sezione si riferisce al BPM medio del genere a cui essa fa riferimento.
+
+## Confronto delle preferenze musicali tra compositori e non compositori 
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, out.width='49%'}
+#VARIAZIONI DEL GENERE PREFERITO SULLA BASE DELLA CAPACITA DI UNA PERSONA DI COMPORRE MUSICA
+
+form %>%
+  filter(Composer == TRUE) %>%
+  ggplot() + 
+  geom_histogram(aes(x = reorder(FavGenre, match(FavGenre, desired_order)), fill = FavGenre), stat = "count") +
+  labs(title = "Genere preferito di chi compone musica", 
+       x = "Favorite genre", y = "Composer") +
+  theme_void() +
+  theme(legend.title = element_blank(), legend.position = "none",
+        plot.title = element_text(size = 15, face = "bold"),
+        axis.text.x = element_text(angle = 0, hjust = 1)) +
+  coord_polar(theta = "x", direction = -1) +
+  scale_fill_manual(values = c(Classical = "#7173a5", Latin = "#b04b2a",
+                    Country = "#303a80", Lofi = "#303a80",
+                    EDM = "#7a4857", Metal = "#b04b2a",
+                    Folk = "#7173a5", Pop = "#7a4857",
+                    Gospel = "#7173a5", RnB = "#303a80",
+                    Hiphop = "#7173a5", Rap = "#303a80",
+                    Jazz = "#7a4857", Rock = "#303a80",
+                    Kpop = "#b04b2a", VideogameMusic = "#7173a5"))
+
+
+form %>%
+  filter(Composer == FALSE) %>%
+  ggplot() + 
+  geom_histogram(aes(x = reorder(FavGenre, match(FavGenre, desired_order)), fill = FavGenre), stat = "count") +
+  labs(title = "Genere preferito di chi NON compone musica", 
+       x = "Favorite genre", y = "Not a composer") +
+  theme_void() +
+  theme(legend.title = element_blank(), legend.position = "none",
+        plot.title = element_text(size = 15, face = "bold"),
+        axis.text.x = element_text(angle = 0, hjust = 1)) +
+  coord_polar(theta = "x", direction = -1) +
+  scale_fill_manual(values = c(Classical = "#7173a5", Latin = "#b04b2a",
+                    Country = "#303a80", Lofi = "#303a80",
+                    EDM = "#7a4857", Metal = "#b04b2a",
+                    Folk = "#7173a5", Pop = "#7a4857",
+                    Gospel = "#7173a5", RnB = "#303a80",
+                    Hiphop = "#7173a5", Rap = "#303a80",
+                    Jazz = "#7a4857", Rock = "#303a80",
+                    Kpop = "#b04b2a", VideogameMusic = "#7173a5"))
+
+```
+
+Lo studio è stato replicato considerando anche la capacità degli intervistati di comporre musica.
+I risultati di questa indagine sono **in linea con lo studio precedente** condotto su coloro che suonano uno strumento, confermando una coerenza nei dati raccolti in entrambe le indagini.
+
+Anche qui vi è una predominanza del **Rock** in entrambi gli scenari e anche qui coloro che praticano la musica tendono a preferire maggiormente generi dalle strutture musicali complesse e ricche di sfumature, mentre coloro che non compongono musica continuano a prediligere generi piu mainstream e popolari.
+
+## Generi musicali più ascoltati per fascia d'età
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#QUALI SONO I GENERI PIU ASCOLTATI IN BASE ALL'ETA
+
+frequencySum <- frequencyTable %>%
+  group_by(AgeGroup) %>%
+  summarise_all(.funs = sum)
+frequencySum <- frequencySum[-5, -2]
+
+# uso tidyr per renderla adatta a ggplot
+frequencySum_long <- frequencySum %>%
+  pivot_longer(cols = starts_with("Frequency"), names_to = "frequency", values_to = "value")
+
+#tabella con i top 5 generi più ascoltati per fascia d'età
+frequencySum_top5 <- frequencySum_long %>%
+  arrange(AgeGroup, desc(value)) %>%
+  group_by(AgeGroup) %>%
+  top_n(n = 5, wt = value)  # Seleziona le prime 5 righe per ogni gruppo "AgeGroup" basandosi sulla variabile "value"
+
+
+# Creazione del grafico a barre
+
+ggplot(frequencySum_top5, aes(x = AgeGroup, y = value, fill = frequency), position = "fill", stat = "count") +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Generi più ascoltati per fasce d'età", x = "Fascia d'età", y = "Frequenza") +
+  theme_minimal() +
+  theme(legend.position = "top", legend.title = element_blank(), 
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#407f3e", "#DBD468", "#005059", "#7ac9d0", "#8f89b7",
+                               "#f1b0da", "#a41623", "#ffa62b", "#ffe45e"))
+
+```
+
+Come emerge chiaramente dalle indagini precedenti, confermiamo ancora una volta che il genere **Rock** occupa la posizione di primo piano tra i generi più ascoltati in tre delle quattro fasce d'età considerate. 
+
+La sola eccezione a questa tendenza è rappresentata dalla **fascia più giovane**, la cui scelta predominante risulta essere il genere **pop**.
+
+Va notato anche che, nella fascia di età dei 51-80, la musica classica emerge come il secondo genere più ascoltato.
+
+## Considerazioni sommarie:
+
+- Per coloro che **praticano la musica**, la musicoterapia potrebbe integrare **attività basate su strumenti e composizione**, stimolando la creatività e l'espressione personale.
+- Per **i giovani** si potrebbe pensare a sessioni terapeutiche basate sul **pop come mezzo per esprimere emozioni** e pensieri, creando un ambiente familiare e confortante, adatto ai partecipanti di giovane età.
+- Il **rock**, per coloro che lo ascoltano con frequenza, può essere sfruttato come veicolo per esplorare **emozioni intense**.
+- Per gli anziani più avvezzi alla **musica classica**, la musicoterapia potrebbe utilizzare tale genere per stimolare la **memoria emotiva**, fornendo un'esperienza rilassante e terapeutica.
+
+Integrando queste informazioni a quelle ottenute durante la prima analisi del dataset, la musicoterapia può essere modellata in modo da rispettare le preferenze musicali e le caratteristiche individuali di ogni singolo individuo, creando un ambiente terapeutico inclusivo che si adatta alle caratteristiche specifiche di ciascun partecipante.
+
+
+# Terzo blocco: Salute mentale
+
+## Esplorazione delle condizioni psicologiche e psichiatriche dei pazienti
+
+In quest'ultima parte dell'indagine verranno studiate quattro delle condizioni psicologiche più frequentemente sperimentate dalle persone: 
+
+- **Ansia**: Un disturbo caratterizzato da preoccupazioni eccessive, tensione, eccessiva preoccupazione per eventi futuri o situazioni.
+- **Depressione**: Un disturbo dell'umore che porta a sentimenti persistenti di tristezza, disinteresse e perdita di piacere nelle attività quotidiane.
+- **Insonnia**: Una condizione in cui una persona ha difficoltà a dormire o a mantenere il sonno durante la notte, influenzando negativamente il riposo.
+- **OCD**: Un disturbo caratterizzato da pensieri intrusivi ossessivi e ricorrenti e comportamenti compulsivi, spesso eseguiti per alleviare l'ansia associata ai pensieri ossessivi.
+
+Dopo un breve quadro generale che va ad analizzare il **grado** in cui i partecipanti sperimentano queste condizioni, verranno confrontate le diverse patologie con le abitudini musicali degli intervistati, per trovare eventuali **correlazioni tra il genere musicale preferito di un individuo e la salute mentale**.
+
+Verra quindi misurato **l'effetto dato dall'ascolto della musica sul loro stato di salute mentale** in base ai dati.
+
+## Quadro generale delle condizioni psicologiche sperimentate dai pazienti
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+# DISTRIBUZIONE DELLE PATOLOGIE in generale
+
+form[, 26:29] %>%
+  gather(key = "variable", value = "value") %>%
+  filter(!is.na(variable)) %>%
+  ggplot(aes(x = value, color = variable), position = "dodge") +
+  geom_density(alpha = 0.5) +
+  labs(title = "Distribuzione dei gradi delle patologie", x = "Scala di sperimentazione della patologia", y = "") +
+  theme_classic() +
+  theme(legend.title = element_blank(),
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_color_manual(values = c("#8f89b7", "#c7d7fb", "#f1b0da", "#fec4b6"))
+
+```
+
+Il **disturbo ossessivo-compulsivo** (OCD), seguito dall'insonnia, è sperimentato con minore frequenza rispetto ad altre condizioni psicologiche. 
+
+Al contrario, l'**ansia** raggiunge un picco significativo con un livello di sperimentazione del disturbo pari a 7 su una scala da 1 a 10, posizionandosi come la patologia che **assume una gravità maggiore tra i pazienti**. 
+
+La **depressione**, pur presentando anch'essa un grado di sperimentazione del disturbo che si aggira intorno al 7, coinvolge un **numero inferiore di pazienti nella forma grave** rispetto all'ansia.
+
+## Distribuzione delle condizioni psicologiche sperimentate dai pazienti suddivise per fasce d'età
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, out.width='49%'}
+# DISTRIBUZIONE DELLE PATOLOGIE IN BASE ALL'ETA
+
+#ansia
+form %>%
+  filter(!is.na(AgeGroup)) %>% 
+  ggplot(mapping = aes(x = AgeGroup, y = Anxiety, fill = AgeGroup)) + 
+  geom_boxplot() +
+  labs(title = "Livello autodichiarato di Ansia in base all'età", x = "Fascia d'età", y = "Livello di Ansia sperimentato") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"),
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#006975", "#098b9a", "#7ac9d0", "#c8e8ea"))
+
+#depressione
+form %>%
+  filter(!is.na(AgeGroup)) %>% 
+  ggplot(mapping = aes(x = AgeGroup, y = Depression, fill = AgeGroup)) + 
+  geom_boxplot() +
+  labs(title = "Livello autodichiarato di Depressione in base all'età", 
+       x = "Fascia d'età", y = "Livello di Depressione sperimentato") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"),
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#006975", "#098b9a", "#7ac9d0", "#c8e8ea"))
+
+#insonnia
+form %>%
+  filter(!is.na(AgeGroup)) %>% 
+  ggplot(mapping = aes(x = AgeGroup, y = Insomnia, fill = AgeGroup)) + 
+  geom_boxplot() +
+  labs(title = "Livello autodichiarato di Insonnia in base all'età", 
+       x = "Fascia d'età", y = "Livello di Insonnia sperimentato") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"),
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#006975", "#098b9a", "#7ac9d0", "#c8e8ea"))
+
+#OCD
+form %>%
+  filter(!is.na(AgeGroup)) %>% 
+  ggplot(mapping = aes(x = AgeGroup, y = OCD, fill = AgeGroup)) + 
+  geom_boxplot() +
+  labs(title = "Livello autodichiarato di OCD in base all'età", x = "Fascia d'età", y = "Livello di OCD sperimentato") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"),
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#006975", "#098b9a", "#7ac9d0", "#c8e8ea"))
+
+```
+
+Basandoci su questi dati, emergono interessanti tendenze nelle esperienze legate alla salute mentale in diverse fasce d'età.
+
+- L'**ansia** è più grave nei giovani di età compresa tra **19 e 25 anni**. Questo potrebbe essere attribuito a **pressioni legate agli studi, alla carriera e alle aspettative sociali** che spesso caratterizzano questo periodo della vita. La presenza dell'ansia anche nella fascia 26-50 anni e 10-18 anni potrebbe essere associata, nel primo caso, a responsabilità legate alla **carriera** e alla **famiglia** e, nel secondo caso, a sfide legate all'**adolescenza** come la scuola, le amicizie e la formazione di una propria identità.
+
+- La similitudine, e la gravità, nei livelli di sperimentazione della **depressione** tra le fasce **19-25** e **26-50** anni potrebbe indicare una difficoltà di gestione delle sfide psicologiche durante la **transizione all'età adulta** e dello stress che ne consegue.
+
+- I livelli più elevati di **insonnia** tra i **26 e i 50 anni** possono essere attribuiti a **preoccupazioni legate al lavoro**, alla famiglia e alle pressioni quotidiane che caratterizzano questa fase della vita. Nei giovani di età **10-18** anni questo fenomeno potrebbe essere collegato a **cambiamenti** fisici, impegni scolastici o, più banalmente, all'utilizzo smodato degli **apparecchi elettronici** fino a tarda ora.
+
+- La presenza di **OCD** più grave (seppur presentando livelli moderatamente alti) tra i giovani di **età inferiore ai 25 anni** potrebbe essere legata alle **pressioni scolastiche/accademiche** e alle **complesse dinamiche sociali** che caratterizzano questa fase della vita.
+
+Interessante è notare come la **fascia di età 50-80 anni** abbia livelli di gravità nettamente inferiori alle altre fasce di età per ognuna delle patologie analizzate. 
+
+Questo fenomeno può essere dato dalla combinazione di **maggiore esperienza di vita acquisita**, che permette di avere una **prospettiva diversa** rispetto ai problemi psicologici.
+
+## Confronto dei livelli di gravità delle patologie rapportate in ogni fascia d'età
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#CONFRONTO TRA LE CONDIZIONI
+
+health_long <- form[, c(26:29, 31)] %>%
+  filter(!is.na(AgeGroup)) %>% 
+  gather(key = "Variable", value = "Value", -AgeGroup)
+
+health_long %>%
+  ggplot(mapping = aes(x = AgeGroup, y = Value, fill = Variable)) + 
+  geom_boxplot() +
+  labs(title = "Confronto del livello di gravità delle varie patologie tra le fasce d'età", 
+       x = "Fascia d'età", y = "Livello della patologia") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"),
+        legend.title = element_blank()) +
+  scale_fill_manual(values = c("#8f89b7", "#c7d7fb", "#f1b0da", "#fec4b6"))
+
+```
+
+In linea con l'andamento illustrato nel grafico che mostra la distribuzione delle diverse condizioni psicologiche, emerge chiaramente come **l'ansia prevalga in quantità maggiore rispetto alle altre patologie** in tutte le fasce d'età considerate (seppur, negli anziani, con un livello di gravità esiguo).
+
+## Correlazione tra livelli maggiori di gravita di una patologia e la quantita di musica ascoltata durante la giornata
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, out.width='49%'}
+# LE PERSONE CON LIVELLI MAGGIORI DI UN DISTURBO TENDONO A RIFUGIARSI NELLA MUSICA PER PIU ORE DURANTE LA GIORNATA?
+
+#Ansia
+form %>%
+  mutate(AnxietyGroup = cut(Anxiety, breaks = c(0, 2, 4, 6, 8, 10),
+                          labels = c("0-2", "3-4", "5-6", "7-8", "9-10"))) %>%
+  filter(!is.na(AnxietyGroup)) %>%
+  ggplot(mapping = aes(x = AnxietyGroup, y = HoursPerDay, fill = AnxietyGroup)) + 
+  geom_boxplot() +
+  labs(title = "Ore di ascolto in base al valore autodichiarato di Ansia", 
+       x = "Livello di Ansia", y = "Ore di musica al giorno") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#ffdab9", "#fbc4ab", "#f8ad9d", "#f4978e", "#f08080"))
+
+#Depressione
+form %>%
+  mutate(DeprexGroup = cut(Depression, breaks = c(0, 2, 4, 6, 8, 10),
+                          labels = c("0-2", "3-4", "5-6", "7-8", "9-10"))) %>%
+  filter(!is.na(DeprexGroup)) %>%
+  ggplot(mapping = aes(x = DeprexGroup, y = HoursPerDay, fill = DeprexGroup)) + 
+  geom_boxplot() +
+  labs(title = "Ore di ascolto in base al valore autodichiarato di Depressione",
+       x = "Livello di Depressione", y = "Ore di musica al giorno") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#ffdab9", "#fbc4ab", "#f8ad9d", "#f4978e", "#f08080"))
+
+#Insonnia
+form %>%
+  mutate(InsomniaGroup = cut(Insomnia, breaks = c(0, 2, 4, 6, 8, 10),
+                          labels = c("0-2", "3-4", "5-6", "7-8", "9-10"))) %>%
+  filter(!is.na(InsomniaGroup)) %>%
+  ggplot(mapping = aes(x = InsomniaGroup, y = HoursPerDay, fill = InsomniaGroup)) + 
+  geom_boxplot() +
+  labs(title = "Ore di ascolto in base al valore autodichiarato di Insonnia",
+       x = "Livello di Insonnia", y = "Ore di musica al giorno") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#ffdab9", "#fbc4ab", "#f8ad9d", "#f4978e", "#f08080"))
+
+#OCD
+form %>%
+  mutate(OCDGroup = cut(OCD, breaks = c(0, 2, 4, 6, 8, 10),
+                          labels = c("0-2", "3-4", "5-6", "7-8", "9-10"))) %>%
+  filter(!is.na(OCDGroup)) %>%
+  ggplot(mapping = aes(x = OCDGroup, y = HoursPerDay, fill = OCDGroup)) + 
+  geom_boxplot() +
+  labs(title = "Ore di ascolto in base al valore autodichiarato di OCD",
+       x = "Livello di OCD", y = "Ore di musica al giorno") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank(), legend.position = "none") +
+  scale_fill_manual(values = c("#ffdab9", "#fbc4ab", "#f8ad9d", "#f4978e", "#f08080"))
+
+```
+
+Nonostante ogni patologia mostri una correlazione diretta tra la gravità della condizione e un leggero aumento delle ore dedicate all'ascolto di musica, è la **depressione** ad evidenziare in modo più pronunciato questo fenomeno. 
+
+Tale incremento infatti, nel terzo grafico, risulta particolarmente visibile e concorda anche con la posizione degli outlier per ogni livello di gravità.
+
+L'unico **dato che sfugge al trend** è rappresentato dal livello di OCD estremamente grave, il quale sembra correlato ad una diminuzione delle ore dedicate all'ascolto di musica.
+
+È plausibile che questo fenomeno sia attribuibile alla scarsa presenza di individui con livelli così gravi di OCD nel dataset, rendendo il **campione statisticamente non significativo**.
+
+Questa ipotesi trova ulteriore supporto nel fatto che gli altri livelli di gravità di OCD seguono coerentemente il trend generale.
+
+## Generi musicali prediletti dalle persone con livelli autodichiarati di malattia superiori a 7/10.
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, out.width='49%'}
+# LE PERSONE CON LIVELLI DI ANSIA > 7 CHE GENERE DI MUSICA PREFERISCONO ASCOLTARE?
+
+#ansia
+form %>%
+  filter(Anxiety >= 7) %>%
+  filter(!is.na(AgeGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = AgeGroup, fill = FavGenre), stat = "count", position = "dodge") +
+  labs(title = "Genere preferito di chi soffre di Ansia con un livello superiore a 7 \nper fasce d'età", 
+       x = "Fascia d'età", y = "Frequenza") +
+  theme_minimal() +
+  theme(legend.position = "top", legend.title = element_blank(), 
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#407f3e", "#89b449", "#DBD468", "#E7E0C4", 
+                               "#005059", "#08808e", "#7ac9d0", "#c8e8ea",
+                               "#3c284b", "#8f89b7", "#f1b0da", "#fec4b6",
+                               "#a41623", "#f85e00", "#ffa62b", "#ffe45e"))
+
+#depressione
+form %>%
+  filter(Depression >= 7) %>%
+  filter(!is.na(AgeGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = AgeGroup, fill = FavGenre), stat = "count", position = "dodge") +
+  labs(title = "Genere preferito di chi soffre di Depressione con un livello \nsuperiore a 7 per fasce d'età", 
+       x = "Fascia d'età", y = "Frequenza") +
+  theme_minimal() +
+  theme(legend.position = "top", legend.title = element_blank(), 
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#407f3e", "#89b449", "#DBD468", 
+                               "#E7E0C4", "#005059", "#08808e", 
+                               "#7ac9d0", "#c8e8ea", "#8f89b7", 
+                               "#f1b0da", "#fec4b6", "#a41623",
+                               "#f85e00", "#ffa62b", "#ffe45e"))
+
+#insonnia
+form %>%
+  filter(Insomnia >= 7) %>%
+  filter(!is.na(AgeGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = AgeGroup, fill = FavGenre), stat = "count", position = "dodge") +
+  labs(title = "Genere preferito di chi soffre di Insonnia con un livello superiore a 7 \nper fasce d'età", 
+       x = "Fascia d'età", y = "Frequenza") +
+  theme_minimal() +
+  theme(legend.position = "top", legend.title = element_blank(), 
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#407f3e", "#89b449", "#DBD468", "#E7E0C4", 
+                               "#005059", "#08808e", "#7ac9d0", "#c8e8ea",
+                               "#3c284b", "#8f89b7", "#f1b0da", "#fec4b6",
+                               "#a41623", "#f85e00", "#ffa62b", "#ffe45e"))
+
+#OCD
+form %>%
+  filter(OCD >= 7) %>%
+  filter(!is.na(AgeGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = AgeGroup, fill = FavGenre), stat = "count", position = "dodge") +
+  labs(title = "Genere preferito di chi soffre di OCD con un livello superiore a 7 \nper fasce d'età", 
+       x = "Fascia d'età", y = "Frequenza") +
+  theme_minimal() +
+  theme(legend.position = "top", legend.title = element_blank(), 
+        plot.title = element_text(size = 15, face = "bold")) +
+  scale_fill_manual(values = c("#407f3e", "#89b449", "#DBD468", "#E7E0C4", 
+                               "#005059", "#08808e", "#7ac9d0", "#c8e8ea",
+                               "#8f89b7", "#f1b0da", "#fec4b6", "#a41623",
+                               "#ffa62b", "#ffe45e"))
+
+```
+
+A prescindere dal tipo di patologia di cui soffrono, il genere musicale che rimane costantemente preferito dagli intervistati è ancora una volta il **Rock** (durante l'interpretazione dei dati verrà quindi dato per assodato).
+
+Analizzando le preferenze musicali in relazione alla gravità dell'**ansia**, vediamo come il pop e la musica classica siano preferiti dalla fascia 10-18 anni, mentre il pop e il metal emergono come scelte comuni nelle fasce di età intermedie.
+
+Le preferenze musicali degli under 18 che soffrono di **depressione** vedono la sostituzione del genere pop con un ascolto maggioritario di hip hop e metal. 
+
+Le fasce intermedie non hanno subito cambiamenti consistenti sui generi prediletti, se non un lieve aumento della musica classica per l'età compresa tra i 26 e i 50 anni.
+
+Risulta affascinante notare che, sia nella fascia di età over 50 che negli under 18 affetti da **insonnia** grave, si evidenzi una predominanza di generi musicali equiparabile al livello di popolarità del rock. Nella prima categoria, si tratta del gospel, mentre nella seconda, del **metal**. 
+
+Infine, tra i pochi individui affetti da **OCD** grave, le preferenze per il rock e il pop rimangono costanti. 
+
+In modo equiparabile al metal nella fascia 10-18, si osserva un aumento dell'apprezzamento per il genere EDM.
+
+Nella fascia 19-25, il terzo genere più apprezzato risulta essere la video game music.
+
+# Musicoterapia
+
+## Musicoterapia
+
+Come ultimo argomento di studio, è stato approfondito l'**impatto dichiarato** della musica da parte dei pazienti, 
+
+concentrandosi sulla loro percezione soggettiva dell'**efficacia della musica sulle condizioni di salute mentale**.
+
+## Impatto della musica sui soggetti affetti da disturbi psicologici
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, out.width='49%'}
+# PER LE PERSONE CON VALORI DI PATOLOGIA ELEVATI PUO ESSERE LA MUSICA STESSA LA CAUSA DEI LORO DISTURBI O E' LO STRUMENTO CHE LI AIUTA A MITIGARNE GLI EFFETTI? --> music effects
+
+#ansia
+form %>%
+  mutate(AnxietyGroup = cut(Anxiety, breaks = c(0, 6, 10),
+                          labels = c("0-6", "7-10"))) %>%
+  filter(!is.na(AnxietyGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = AnxietyGroup, fill = MusicEffects), stat = "count", position = "fill") +
+  labs(title = "Efficacia della musica per la cura dell'ansia",
+       x = "Effetto della musica a seconda del livello di ansia", y = "Frequenza relativa") +
+  theme_classic() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank()) +
+  scale_fill_manual(values = c("#cd7d66", "#7a4857", "#303a80"))
+
+#depressione
+form %>%
+  mutate(DeprexGroup = cut(Depression, breaks = c(0, 6, 10),
+                          labels = c("0-6", "7-10"))) %>%
+  filter(!is.na(DeprexGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = DeprexGroup, fill = MusicEffects), stat = "count", position = "fill") +
+  labs(title = "Efficacia della musica per la cura della Depressione",
+       x = "Effetto della musica a seconda del livello di Depressione", y = "Frequenza relativa") +
+  theme_classic() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank()) +
+  scale_fill_manual(values = c("#cd7d66", "#7a4857", "#303a80"))
+
+#insonnia
+form %>%
+  mutate(InsomniaGroup = cut(Insomnia, breaks = c(0, 6, 10),
+                          labels = c("0-6", "7-10"))) %>%
+  filter(!is.na(InsomniaGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = InsomniaGroup, fill = MusicEffects), stat = "count", position = "fill") +
+  labs(title = "Efficacia della musica per la cura dell'Insonnia",
+       x = "Effetto della musica a seconda del livello di Insonnia", y = "Frequenza relativa") +
+  theme_classic() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank()) +
+  scale_fill_manual(values = c("#cd7d66", "#7a4857", "#303a80"))
+
+#OCD
+form %>%
+  mutate(OCDGroup = cut(OCD, breaks = c(0, 6, 10),
+                          labels = c("0-6", "7-10"))) %>%
+  filter(!is.na(OCDGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = OCDGroup, fill = MusicEffects), stat = "count", position = "fill") +
+  labs(title = "Efficacia della musica per la cura dell'OCD",
+       x = "Effetto della musica a seconda del livello di OCD", y = "Frequenza relativa") +
+  theme_classic() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank()) +
+  scale_fill_manual(values = c("#cd7d66", "#7a4857", "#303a80"))
+
+
+
+```
+Oltre il 70% dei soggetti riferisce un **miglioramento della propria condizione mentale** grazie all'ascolto della musica.
+
+Coloro che presentano livelli di patologie **inferiori a 7** che dichiarano di **non percepire particolari effetti** potrebbero già sperimentare un benessere sufficiente, riducendo la percezione dell'impatto della musica.
+
+Le persone con livelli di patologie **superiori a 7** che dichiarano un **peggioramento delle proprie condizioni** psicologiche potrebbero essere influenzate dalla diversità nelle preferenze musicali, nei meccanismi di coping (strategie/processi che un individuo utilizza per gestire lo stress) e nella risposta emotiva alla musica.
+
+I soggetti che riportano di essere affetti da **ansia** sono gli **unici ad avere una correlazione positiva** tra effetto benefico della musica e livelli alti di ansia.
+
+**Con l'aumentare della gravità delle altre patologie, quali la depressione, l'insonnia e l'OCD, diminuisce l'effetto benefico della musica**.
+
+Questo fenomeno potrebbe risiedere nella complessità e nella gravità delle condizioni stesse. Con l'aggravarsi di queste patologie, potrebbe diventare più difficile ottenere un sollievo significativo attraverso la sola musica.
+
+## Fasce d'età in cui la musicoterapia mostra particolare efficacia
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+#PER QUALI FASCE DI ETA LA MUSICOTERAPIA FA PIU EFFETTO?
+
+form %>%
+  filter(!is.na(AgeGroup)) %>%
+  ggplot() + 
+  geom_histogram(aes(x = AgeGroup, fill = MusicEffects), stat = "count", position = "fill") +
+  labs(title = "Effetto della musica sulle condizioni di salute mentale \nper fasce d'età",
+       x = "Effetto della musicoterapia a seconda dell'età", y = "Frequenza relativa") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank()) +
+  scale_fill_manual(values = c("#cd7d66", "#7a4857", "#303a80"))
+
+```
+
+La musicoterapia potrebbe dimostrarsi un valido strumento per migliorare le condizioni psicologiche nei pazienti di età compresa **tra i 10 e i 18 anni**, con un tasso di efficacia superiore al 75%.
+
+Tuttavia, tra i 26 e i 50 anni, sebbene mostri un'efficacia superiore al 60%, sembra essere la fascia d'età in cui la musicoterapia riporta meno benefici.
+
+## Close up sull'impatto di alcuni generi musicali sulle condizioni psicologiche delle persone
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE, out.width='49%'}
+# la musica è più efficace sui 10-18 
+# soprattutto per la cura dell'ansia grave
+
+#ANALIZZO GENERI MUSICALI --> più cresce la frequenza di ascolto e più i livelli di malattia si alzano/abbassano
+#classica (tutto =)
+#lofi (=A, =D, +I, +O)
+#EDM (=A, +D, +I, +O)
+#Folk (+A, +D, =I, =O)
+#Hiphop (=A, +D, =I, +O)
+#Jazz (+A, +D, +I, =O)
+#Kpop (=A, =D, =I, -O)
+#Latin (=A, +D, =I, =O)
+#RnB (=A, =D, =I, +O)
+#Videogame music (+A, =D, +I, =O)
+
+
+#rock (+A, +D, +I, =O)
+form [, c(24, 26:29)] %>%
+  gather(key = "Variable", value = "Value", -FrequencyRock) %>%
+  filter(Variable != "OCD") %>%
+  ggplot(mapping = aes(x = FrequencyRock, y = Value, fill = Variable), position = "dodge") + 
+  geom_boxplot() +
+  labs(title = "L'effetto del rock",
+       x = "Frequenza di ascolto del Rock", y = "Livello di gravità delle patologie") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank())+ 
+  scale_fill_manual(values = c("#8f89b7", "#c7d7fb", "#f1b0da"))
+
+#pop (+A, =D, =I, +O)
+form [, c(21, 26:29)] %>%
+  gather(key = "Variable", value = "Value", -FrequencyPop) %>%
+  filter(Variable != "Depression") %>%
+  filter(Variable != "Insomnia") %>%
+  ggplot(mapping = aes(x = FrequencyPop, y = Value, fill = Variable), position = "dodge") + 
+  geom_boxplot() +
+  labs(title = "L'effetto del pop",
+       x = "Frequenza di ascolto del pop", y = "Livello di gravità delle patologie") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank())+ 
+  scale_fill_manual(values = c("#8f89b7", "#fec4b6"))
+
+#rap (=A, ++D, =I, +O)
+form [, c(23, 26:29)] %>%
+  gather(key = "Variable", value = "Value", -FrequencyRap) %>%
+  filter(Variable != "Anxiety") %>%
+  filter(Variable != "Insomnia") %>%
+  ggplot(mapping = aes(x = FrequencyRap, y = Value, fill = Variable), position = "dodge") + 
+  geom_boxplot() +
+  labs(title = "L'effetto della musica Rap",
+       x = "Frequenza di ascolto della musica Rap", y = "Livello di gravità delle patologie") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank())+ 
+  scale_fill_manual(values = c("#c7d7fb", "#fec4b6"))
+
+#metal (=A, +D, +I, -O)
+form [, c(20, 26:29)] %>%
+  gather(key = "Variable", value = "Value", -FrequencyMetal) %>%
+  filter(Variable != "Anxiety") %>%
+  ggplot(mapping = aes(x = FrequencyMetal, y = Value, fill = Variable), position = "dodge") + 
+  geom_boxplot() +
+  labs(title = "L'effetto della musica Metal",
+       x = "Frequenza di ascolto della musica Metal", y = "Livello di gravità delle patologie") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank())+ 
+  scale_fill_manual(values = c("#c7d7fb", "#f1b0da", "#fec4b6"))
+
+#country (=A, =D, -I, =O)
+form [, c(11, 26:29)] %>%
+  gather(key = "Variable", value = "Value", -FrequencyCountry) %>%
+  filter(Variable == "Insomnia") %>%
+  ggplot(mapping = aes(x = FrequencyCountry, y = Value, fill = Variable), position = "dodge") + 
+  geom_boxplot() +
+  labs(title = "L'effetto del Country",
+       x = "Frequenza di ascolto del Country", y = "Livello di gravità delle patologie") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank())+ 
+  scale_fill_manual(values = "#f1b0da")
+
+#Gospel (=A, -D, -I, =O)
+form [, c(14, 26:29)] %>%
+  gather(key = "Variable", value = "Value", -FrequencyGospel) %>%
+  filter(Variable != "Anxiety") %>%
+  filter(Variable != "OCD") %>%
+  ggplot(mapping = aes(x = FrequencyGospel, y = Value, fill = Variable), position = "dodge") + 
+  geom_boxplot() +
+  labs(title = "L'effetto del Gospel",
+       x = "Frequenza di ascolto del Gospel", y = "Livello di gravità delle patologie") +
+  theme_bw() +
+  theme(plot.title = element_text(size = 15, face = "bold"), 
+        legend.title = element_blank())+ 
+  scale_fill_manual(values = c("#c7d7fb", "#f1b0da"))
+
+
+```
+
+Sebbene il **rock** sia il genere musicale prediletto in tutte le fasce generazionali, indipendentemente dalle condizioni di salute mentale, i dati indicano che un ascolto frequente di questo genere è correlato a un aumento di ansia, depressione e insonnia, rendendolo **non particolarmente adatto** ad una terapia assieme a generi come il pop e il rap.
+
+In contrasto, emerge che il genere **metal** si configura come una scelta efficace per affrontare l'OCD, a condizione che tale disturbo non sia associato a depressione o insonnia.
+
+Il **country** si rivela benefico nel trattamento dell'insonnia assieme alla musica **gospel** che dimostra, inoltre, di avere un impatto positivo, contribuendo a ridurre i livelli di depressione sperimentata dagli individui.
+
+## Considerazioni conclusive sulla musicoterapia
+
+Dai dati emersi dalle ultime analisi, si possono fare interessanti osservazioni riguardo all'efficacia della musicoterapia.
+
+- Per chi soffre di **ansia**, la musicoterapia potrebbe rappresentare un intervento **particolarmente efficace** nel migliorare le condizioni psicologiche. Questa scoperta può indicare una possibile via per sviluppare approcci terapeutici mirati per affrontare l'ansia attraverso l'utilizzo strategico della musica.
+- Potrebbe essere necessario integrare la musicoterapia con approcci terapeutici più specifici e complessi per affrontare condizioni psicologiche più serie come la **depressione, l'insonnia e i disturbi ossessivo compulsivi**. Tuttavia, nei casi in cui queste condizioni presentino **gravità più lieve**, la musicoterapia da sola potrebbe comunque avere un impatto positivo.
+- La musicoterapia si rivela promettente come strumento terapeutico soprattutto **nelle fasce d'età più giovani**, per migliorare il benessere psicologico nei pazienti di età compresa tra i 10 e i 18 anni.
+- **Alcuni generi musicali**, se ascoltati con frequenza, tendono ad essere più efficaci di altri nell'**alleviare alcune condizioni psicologiche**.
+
+# Grazie per l'attenzione
